@@ -1251,7 +1251,8 @@ over that folder, leaving every other file LG's. The parts are the side buttons
 (`globalline`, shrunk to 0 by 0 after the banner: taking it out left the screen
 black), the Quick Cards (`qcardList`) and the recommended shelf
 (`recommendedShelf`); the banner takes the height of the rows taken out, so the
-apps row stays at the bottom. The banner's text and picture are files in the
+apps row stays at the bottom, and with the side buttons hidden it also takes
+their width and the gap above it, reaching the screen's edges. The banner's text and picture are files in the
 same folder: the text is looked up by its English in `i18n`, a symlink to LG's
 language files under `/mnt/lg/wee/ui_l10n`, so hiding it lays an `i18n` folder
 of its own over the symlink, copied from LG's each time it is mounted with the

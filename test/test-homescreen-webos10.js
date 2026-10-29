@@ -142,7 +142,16 @@ var lgRows = rows(LG);
   assert.strictEqual(banner, box, 'banner fills the taller container');
   var side = /<item id="globalline"[^>]*itemHeight="(\d+)"/.exec(xml)[1];
   assert.strictEqual(side, hidden.indexOf('sideIcons') !== -1 ? '0' : box, 'side buttons grow with it unless hidden');
+  // #833: without the side buttons the banner reaches the edges, as the picture behind it did not.
+  var width = /<item id="herobanner"[^>]*itemWidth="(\d+)"/.exec(xml)[1];
+  var firstGap = /<item id="margin"[^>]*itemHeight="(\d+)"/.exec(xml)[1];
+  var sideHidden = hidden.indexOf('sideIcons') !== -1;
+  assert.strictEqual(width, sideHidden ? '3840' : '3492', hidden.join('+') + ': the whole width without the side buttons');
+  assert.strictEqual(firstGap, sideHidden ? '0' : '45', hidden.join('+') + ': and the gap above folded into it');
 });
+var sideOnly = home10.buildLayout(LG, ['sideIcons']);
+assert.ok(/id="herobanner"[^>]*itemWidth="3840"[^>]*itemHeight="945"/.test(sideOnly), 'side buttons alone: 3840 by 900 + 45');
+assert.strictEqual(total(rows(sideOnly)), total(lgRows), 'the apps row stays where LG puts it');
 var both = home10.buildLayout(LG, ['quickCards', 'recommended']);
 assert.ok(/id="container"[^>]*itemHeight="1685"/.test(both), '900 + 74 + 180 + 531');
 assert.deepEqual(rows(both).map(function (r) { return r.id; }), ['margin', 'container', 'margin', 'appList', 'margin', 'quickGuide']);
@@ -212,7 +221,8 @@ home10.setPart('quickCards', false, checked(function (refused) {
           console.log('  ✓ hiding the banner text lays a copy of LG\'s language files over its symlink with the two strings blank');
 
           var b0 = home10.banner();
-          assert.deepEqual(b0, { choice: 'lg', own: false, width: 3492, height: 1685 }, 'the banner\'s size with Quick Cards and Recommended hidden');
+          assert.deepEqual(b0, { choice: 'lg', own: false, width: 3840, height: 1730 },
+            'with the side buttons, Quick Cards and Recommended hidden, the whole width and the gap above it too');
           home10.setBanner('own', checked(function (noOwn) {
           assert.strictEqual(noOwn.ok, false, 'nothing uploaded yet');
           home10.setBanner('black', checked(function (r2) {

@@ -185,11 +185,18 @@ function itemHeight(l) {
 // The home app lays the rows out top to bottom from their heights, so a row
 // that is only removed pulls the apps row up to the middle of the screen
 // (#612). The banner takes over the height of each removed row and the gap
-// above it, keeping the apps row where LG puts it.
+// above it, keeping the apps row where LG puts it. With the side buttons
+// hidden the banner also takes their width and the gap above the container,
+// as LG's 3492-wide banner left a strip of black down the right and along the
+// top (#833); the rows add up to LG's height as before.
 function buildLayout(lg, hidden) {
   var lines = lg.split('\n');
+  var sideHidden = hidden.indexOf('sideIcons') !== -1;
   var sideLine = null;
   var freed = 0;
+  var top = 0;
+  var fullWidth = 0;
+  var inContainer = false;
   var out = [];
   lines.forEach(function (l) {
     if ((hidden.indexOf('quickCards') !== -1 && l.indexOf('id="qcardList"') !== -1) ||
@@ -200,23 +207,39 @@ function buildLayout(lg, hidden) {
       if (l.indexOf('qcardList') !== -1 && prev && prev.indexOf('id="margin"') !== -1) freed += itemHeight(out.pop());
       return;
     }
-    if (hidden.indexOf('sideIcons') !== -1 && l.indexOf('id="globalline"') !== -1) {
+    if (sideHidden && l.indexOf('id="globalline"') !== -1) {
       sideLine = l.replace(/itemWidth="\d+"/, 'itemWidth="0"').replace(/itemHeight="\d+"/, 'itemHeight="0"');
       return;
     }
+    if (/id="container"/.test(l)) {
+      inContainer = true;
+      fullWidth = itemWidth(l);
+    }
+    // The gap above the banner, where it is the first row.
+    if (sideHidden && !inContainer && !top && /id="margin"/.test(l) && itemHeight(l)) {
+      top = itemHeight(l);
+      l = l.replace(/itemHeight="\d+"/, 'itemHeight="0"');
+    }
+    if (sideHidden && fullWidth && /<item id="herobanner"/.test(l)) l = l.replace(/itemWidth="\d+"/, 'itemWidth="' + fullWidth + '"');
     out.push(l);
     if (sideLine && /<item id="herobanner"/.test(l)) {
       out.push(sideLine);
       sideLine = null;
     }
   });
-  if (freed) {
+  var grow = freed + top;
+  if (grow) {
     out = out.map(function (l) {
       if (!/id="(container|herobanner|globalline)"/.test(l) || !itemHeight(l)) return l;
-      return l.replace(/itemHeight="\d+"/, 'itemHeight="' + (itemHeight(l) + freed) + '"');
+      return l.replace(/itemHeight="\d+"/, 'itemHeight="' + (itemHeight(l) + grow) + '"');
     });
   }
   return out.join('\n');
+}
+
+function itemWidth(l) {
+  var m = /itemWidth="(\d+)"/.exec(l);
+  return m ? Number(m[1]) : 0;
 }
 
 function sh(cmd, cb) {
