@@ -902,12 +902,20 @@ step('on webOS 11 LG\'s Flutter Home is kept from coming back while Glasshouse H
   });
 });
 
-step('on webOS 9 the preload manager is left as it is', function (done) {
+step('on webOS 9 and 10 the preload manager is left as it is', function (done) {
   start(null, {});
   home.enable(function (r) {
     assert.ok(r.ok, r.error);
     assert.deepEqual(tv.preload, []);
-    home.disable(function () { done(); });
+    home.disable(function () {
+      start(null, { webosVersion: '10.3.1' });
+      tv.nudgeIgnored = true;
+      home.enable(function (r10) {
+        assert.ok(r10.ok, r10.error);
+        assert.deepEqual(tv.preload, [], 'webOS 10 held its place without it');
+        home.disable(function () { done(); });
+      });
+    });
   });
 });
 

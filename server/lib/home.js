@@ -146,7 +146,7 @@ var historyModule = null;
 var stateDir = '/var/lib/tvweb';
 var webosVersion = null;
 /*
- * LG's Flutter Home (webOS 10 and later) kept from coming back while Glasshouse
+ * LG's Flutter Home (webOS 11) kept from coming back while Glasshouse
  * Home has its place. On a G3 (webOS 11.2.0, #1042) the preload manager started
  * a new flutter-client for com.webos.app.home a minute or two after the
  * takeover stopped LG's, with sam already reading the web app: Home presses
@@ -1018,9 +1018,10 @@ function switchTo(on, cb) {
   })();
 }
 
-// Whether LG's Home is the Flutter one, which the preload manager starts again.
+// Where the preload manager was seen starting LG's Home again (#1042). webOS
+// 10's Home is Flutter too, but Glasshouse Home held its place there without this.
 function flutterHome() {
-  return parseInt(String(webosVersion || ''), 10) >= 10;
+  return parseInt(String(webosVersion || ''), 10) >= 11;
 }
 
 function preloadLgHome(enabled) {
