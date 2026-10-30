@@ -100,6 +100,12 @@ controller uses the input's `lastUniqueId`, or its first SIMPLINK device.
 On HDMI 2 with no remembered source, this selected the STEREO 70s receiver
 (ID 5), leaving the PS5 (ID 8, physical address 2.4.0.0) asleep.
 
+`lastUniqueId` follows each selection at once: on 27 October 2026, launching
+HDMI 2 with the PS5's ID set it to 8, with the receiver's ID to 5, and a
+later plain HDMI 2 launch left it at 5. It is the TV's own record of which
+device on a port was last chosen. Whether the PS5 waking itself (One Touch
+Play) updates it was not tested.
+
 On 20 October 2026, with the PS5 confirmed in rest mode, switching through
 HDMI 4 and Home then launching HDMI 2 with its device ID woke it. CEC history
 showed `Set Stream Path` to 2.4.0.0 and the PS5 replying `Report Power Status`
@@ -836,6 +842,21 @@ from Screen Saver to Screen Off and back to Active 0.2 s later, with the screen
 on. From Active it holds. Screen-time limits dismiss the screen saver with
 Back first, as the screen saver tab does.
 
+## Toasts with an icon (C1, webOS 6.5.1)
+
+`Toast.qml` knows three `type`s. `standard`, the default, is the toast at the
+bottom center, text only: its icon slot is 0 wide. `advanced` is the same
+900-wide toast at the bottom with a 66 icon, and is clickable when it has an
+`action`. `light` is the small toast that slides down at the top right, 50%
+black, with a 36 icon, between 150 and 450 wide. The icon is `iconUrl`, a local file:
+`SystemUI/Notification/Toast.qml` passes it through `Utils.applyImagePath`.
+Sizes are at 1080p (`NotificationStyle.qml`). A toast stays about 5 seconds
+whatever is asked.
+
+On a B8 (webOS 4.4.3), `createToast` refuses `type: advanced` with "Message
+is not parsed", with or without `iconUrl`; `light` and `standard` work, `light`
+with its icon. A C2 (webOS 9.2.2) shows all three.
+
 ## Switching off (C5, webOS 10.3.1)
 
 `power/powerOff` with reason `remoteKey` switched the TV off, going Active,
@@ -1181,6 +1202,18 @@ and others' work on webOS 10
   YouTube read `playing`, then `paused` after the remote's Pause key, and the
   list was empty on HDMI 2. `com.webos.media/pause` with that `mediaId`
   answered `returnValue: false` and did not pause.
+
+## Services a TV does not have (webOS 3.9.3, 43UJ750V; webOS 9.2.2, C2)
+
+ls-hubd routes a call only to a service named on a `Name=` line of its
+service files (`/usr/share/luna-service2/services.d`,
+`/usr/share/dbus-1/system-services`); one line can name several, separated by
+`;`. On a C2 a call to an unlisted service, such as `com.webos.service.acb`,
+answers "Service does not exist" at once. On a 43UJ750V (webOS 3.9.3) a call
+to an unlisted one, such as `com.webos.service.audio` or
+`com.webos.service.videooutput`, gets no answer: luna-send waits out `-w` and
+logs "Shutting down with unsent QueryName message", and ls-hubd logs
+`LSHUB_NOT_LSTED` "Service not listed in service files" as an error (#1112).
 
 ## Boot and app state (webOS 9.2.2, C2)
 

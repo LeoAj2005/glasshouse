@@ -293,6 +293,7 @@ function defaults() {
     // Apps moved off the Apps row into its More apps tile, in no order of
     // their own: the folder shows them in the row's.
     folder: [],
+    excludedRecents: [],
     channels: [],
     hintSeen: false,
     searchHintSeen: false,
@@ -371,6 +372,7 @@ function normalise(raw) {
   // A hidden app shows nowhere, so it is not also in the folder.
   var appHidden = d.hidden.app;
   d.folder = stringList(raw.folder).filter(function (id) { return appHidden.indexOf(id) === -1; });
+  d.excludedRecents = stringList(raw.excludedRecents);
   d.enabled = raw.enabled === true;
   d.restorePending = raw.restorePending === true;
   d.hintSeen = raw.hintSeen === true;
@@ -499,6 +501,7 @@ function setLayout(body, cb) {
     sort: perRow(body.sort, c.sort),
     hidden: perRow(body.hidden, c.hidden),
     folder: body.folder !== undefined ? body.folder : c.folder,
+    excludedRecents: body.excludedRecents !== undefined ? body.excludedRecents : c.excludedRecents,
     // A moved Channels row reorders the channels themselves.
     channels: ordered(body.order && isArray(body.order.ch) ? body.order.ch : [],
                       body.channels !== undefined ? stringList(body.channels, MAX_CHANNELS) : c.channels),
@@ -539,6 +542,7 @@ function setLayout(body, cb) {
 
 function layoutOf(c) {
   return { rows: c.rows, order: c.order, sort: c.sort, hidden: c.hidden, folder: c.folder, channels: c.channels, hintSeen: c.hintSeen,
+    excludedRecents: c.excludedRecents,
     searchHintSeen: c.searchHintSeen, picture: c.picture, search: c.search, recommended: c.recommended,
     fade: c.fade, hideUnused: c.hideUnused, showClock: c.showClock, rowsBottom: c.rowsBottom, view: c.view,
     showLastOn: c.showLastOn, showAppCount: c.showAppCount, showCec: c.showCec, colours: c.colours,
@@ -866,20 +870,42 @@ function programme(r) {
 }
 
 /*
+ * The uniqueId of the CEC device the TV last selected on an HDMI port, or
+ * null. Read fresh, not from the device list's cache: it changes as soon as a
+ * tile or LG's input picker selects another device behind a receiver.
+ */
+function selectedOnPort(port, cb) {
+  luna('com.webos.service.eim/getAllInputStatus', {}, function (r) {
+    var picked = null;
+    (r && isArray(r.devices) ? r.devices : []).forEach(function (d) {
+      if (d && d.id === 'HDMI_' + port && typeof d.lastUniqueId === 'number' && d.lastUniqueId > 0) picked = d.lastUniqueId;
+    });
+    cb(picked);
+  });
+}
+
+/*
  * What was in front before the view: the top strip's "what is on". An input
- * names the devices on it; Live TV, the channel it was last on.
+ * names the device the TV last selected on it, or every device on it when
+ * the TV has not said; Live TV, the channel it was last on.
  */
 function now(cb) {
   if (!lastSource) return cb({ kind: null });
   var id = lastSource.appId;
   var m = /^com\.webos\.app\.hdmi(\d)$/.exec(id);
   if (m) {
+    var port = +m[1], since = lastSource.at;
     return devices(function (devs) {
-      var on = (devs || []).filter(function (d) { return d.port === +m[1]; });
-      cb({
-        kind: 'input', appId: id, since: lastSource.at, port: +m[1],
-        title: on.length ? on.map(function (d) { return d.name; }).join(' / ') : null,
-        devices: on.map(function (d) { return d.id; })
+      selectedOnPort(port, function (picked) {
+        var on = (devs || []).filter(function (d) { return d.port === port; });
+        var chosen = on.filter(function (d) { return d.uniqueId === picked; });
+        if (chosen.length) on = chosen;
+        cb({
+          kind: 'input', appId: id, since: since, port: port,
+          title: on.length ? on.map(function (d) { return d.name; }).join(' / ') : null,
+          via: on.length === 1 ? on[0].via : null,
+          devices: on.map(function (d) { return d.id; })
+        });
       });
     });
   }
@@ -1146,13 +1172,14 @@ function supported() {
   if (/^10\./.test(v) || (/^11\./.test(v) && allowExperimentalFn())) return { ok: true, webos: v, experimental: true };
   // LG's Home is a native app there too (a CX on 5.5.0-19), but sam has
   // neither the configd nudge nor the block and release, so taking its place
-  // restarts sam, which both switches need (lib/samrescan). Behind the
-  // setting, as webOS 11: a sam restart at every switch and at boot is the
-  // owner's call. webOS 6 (a C1 on 6.5.3) shows the same limits.
-  if (/^[56]\./.test(v) && allowExperimentalFn()) return { ok: true, webos: v, experimental: true };
+  // restarts sam, which both switches need (lib/samrescan), and that closes
+  // the apps open: restartsApps has the dashboards say so. webOS 6 (a C1 on
+  // 6.4.0 and 6.5.3, a B1 on 6.5.3) shows the same limits. Tried on all three
+  // and a CX through #910.
+  if (/^[56]\./.test(v)) return { ok: true, webos: v, experimental: true, restartsApps: true };
   return {
     ok: false, webos: v || null,
-    reason: msg('srv.home.untested', 'Glasshouse Home has been tried only on webOS 5, 7, 9 and 10. This TV runs webOS {version}.', { version: v || '?' })
+    reason: msg('srv.home.untested', 'Glasshouse Home has been tried only on webOS 5, 6, 7, 9 and 10. This TV runs webOS {version}.', { version: v || '?' })
   };
 }
 
@@ -1964,7 +1991,7 @@ function init(opts) {
   if (opts.stateDir) stateDir = opts.stateDir;
   wallpapers.init(stateDir);
   recent.init(stateDir, opts.now);
-  recentApps.init({ luna: lunaFn });
+  recentApps.init({ luna: lunaFn, excluded: function () { return readConfig().excludedRecents; } });
   recommended.init({ luna: lunaFn });
   search.init({ luna: lunaFn, Subscription: opts.Subscription, apps: launchPoints,
     opened: function (id) { noteOpened('app', id); }, enabled: function () { return readConfig().search; },

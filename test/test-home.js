@@ -263,6 +263,23 @@ function next() {
   s.fn(function () { console.log('  ✓ ' + s.name); next(); });
 }
 
+step('Recents exclusions are normalised, saved, preserved and reloaded', function (done) {
+  start({ excludedRecents: ['private.app', 'private.app', 7, ''] });
+  home.setLayout({ excludedRecents: ['other.app', 'other.app', null] }, function (r) {
+    assert.deepEqual(r.layout.excludedRecents, ['other.app']);
+    home.setLayout({ picture: false }, function (r2) {
+      assert.deepEqual(r2.layout.excludedRecents, ['other.app']);
+      var saved = JSON.parse(fs.readFileSync(path.join(dir, 'home.json'), 'utf8'));
+      assert.deepEqual(saved.excludedRecents, ['other.app']);
+      start(saved);
+      home.setLayout({}, function (r3) {
+        assert.deepEqual(r3.layout.excludedRecents, ['other.app']);
+        done();
+      });
+    });
+  });
+});
+
 step('a layout saved from a dashboard changes the version the view\'s heartbeat brings', function (done) {
   start(null);
   var before = home.beat().layoutVersion;
@@ -328,6 +345,32 @@ step('device tiles use LG\'s CEC selection contract, or open the port without a 
       var expected = { id: c.app };
       if (c.selected) expected.params = { id: 'uniqueId', value: c.selected };
       assert.deepEqual(tv.launches, [expected], c.id + ', CEC ID ' + c.uniqueId);
+      nextCase();
+    });
+  })();
+});
+
+step('last watched on a receiver\'s port is the device the TV last selected there', function (done) {
+  start(null);
+  var hdmi2 = { id: 'HDMI_2', hdmiPlugIn: true, subList: [
+    { id: 'SIMPLINK', depth: 1, physicalAddress: 8192, uniqueId: 5, osdName: 'STEREO 70s' },
+    { id: 'SIMPLINK', depth: 2, physicalAddress: 9216, uniqueId: 8, osdName: 'PlayStation 5' }
+  ] };
+  tv.devices = [hdmi2];
+  foreground('com.webos.app.hdmi2');
+  // The device list stays cached between reads; the selection must not.
+  var cases = [
+    { last: 8, title: 'PlayStation 5', via: 'STEREO 70s', devices: ['hdmi2:playstation-5'] },
+    { last: 5, title: 'STEREO 70s', via: null, devices: ['hdmi2:stereo-70s'] },
+    { last: -1, title: 'STEREO 70s / PlayStation 5', via: null, devices: ['hdmi2:stereo-70s', 'hdmi2:playstation-5'] },
+    { last: 3, title: 'STEREO 70s / PlayStation 5', via: null, devices: ['hdmi2:stereo-70s', 'hdmi2:playstation-5'] }
+  ];
+  (function nextCase() {
+    var c = cases.shift();
+    if (!c) return done();
+    hdmi2.lastUniqueId = c.last;
+    home.now(function (r) {
+      assert.deepEqual([r.kind, r.port, r.title, r.via, r.devices], ['input', 2, c.title, c.via, c.devices], 'lastUniqueId ' + c.last);
       nextCase();
     });
   })();
@@ -992,18 +1035,24 @@ step('webOS 11 only with allowExperimentalHome', function (done) {
   });
 });
 
-step('webOS 5 and 6 only with allowExperimentalHome', function (done) {
+step('webOS 5 and 6 are offered, experimental, with each switch closing the apps that are open', function (done) {
   start(null, { webosVersion: '5.5.0' });
-  home.status(function (st0) {
-    assert.strictEqual(st0.supported.ok, false, 'a sam restart at every switch is the owner\'s call');
+  home.status(function (st5) {
+    assert.strictEqual(st5.supported.ok, true, 'no setting needed on a CX');
+    assert.strictEqual(st5.supported.experimental, true);
+    assert.strictEqual(st5.supported.restartsApps, true, 'the dashboards say a switch restarts the app manager');
     start(null, { webosVersion: '6.5.3' });
-    home.status(function (st1) {
-      assert.strictEqual(st1.supported.ok, false, 'same on a C1');
-      start(null, { webosVersion: '5.5.0', allowExperimental: function () { return true; } });
-      home.status(function (st) {
-        assert.strictEqual(st.supported.ok, true);
-        assert.strictEqual(st.supported.experimental, true);
-        done();
+    home.status(function (st6) {
+      assert.strictEqual(st6.supported.ok, true, 'same on a C1');
+      assert.strictEqual(st6.supported.restartsApps, true);
+      start(null, { webosVersion: '9.2.2' });
+      home.status(function (st9) {
+        assert.strictEqual(st9.supported.restartsApps, undefined, 'not where sam reads the files without a restart');
+        start(null, { webosVersion: '11.2.0' });
+        home.status(function (st11) {
+          assert.strictEqual(st11.supported.ok, false, 'webOS 11 still needs the setting');
+          done();
+        });
       });
     });
   });
